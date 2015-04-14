@@ -28,18 +28,7 @@ class DotabuffScraper
 		if(!$content) {
 			return false;
 		}
-		$doc = new DOMDocument;
-		libxml_use_internal_errors(true);
-		if(!$doc->loadHTML($content)) {
-			$error = '';
-			foreach (libxml_get_errors() as $error) {
-				$error .= $error->message.' | ';
-			}
-			libxml_clear_errors();
-			$this->addError('Load HTML error: '.$error);
-			return false;
-		}
-		$xpath = new DOMXpath($doc);
+		$xpath = $this->getExpath($content);
 		$heroGrid = $xpath->query("//div[@class='hero-grid']")->item(0);
 		if (!is_null($heroGrid)) {
 			$childNodes = $heroGrid->childNodes;
@@ -65,6 +54,15 @@ class DotabuffScraper
 	{
 		foreach ($this->heroList as $key => $value) {
 			$dataUrl = $this->_heroesUrl.'/'.$key.'/matchups?date='.$this->_patch;
+			$content = $this->getRequest($dataUrl);
+			if(!$content) {
+				return false;
+			}
+			$xpath = $this->getExpath($content);
+			$tableBody = $xpath->query("//table")->item(1);
+			if (!is_null($heroGrid)) {
+				
+			}
 		}
 		return false;
 	}
@@ -105,5 +103,27 @@ class DotabuffScraper
 	public function getErrors()
 	{
 		return $this->_errors;
+	}
+
+	/**
+	 * Returns XPath object for the HML content
+	 * @param  string $content HTML string
+	 * @return DOMXpath XPath object
+	 */
+	private function getXpath($content)
+	{
+		$doc = new DOMDocument;
+		libxml_use_internal_errors(true);
+		if(!$doc->loadHTML($content)) {
+			$error = '';
+			foreach (libxml_get_errors() as $error) {
+				$error .= $error->message.' | ';
+			}
+			libxml_clear_errors();
+			$this->addError('Load HTML error: '.$error);
+			return false;
+		}
+		$xpath = new DOMXpath($doc);
+		return $xpath;
 	}
 }
