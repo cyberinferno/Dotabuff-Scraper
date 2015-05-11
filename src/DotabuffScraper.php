@@ -1,4 +1,6 @@
 <?php
+namespace cyberinferno;
+
 class DotabuffScraper
 {
 	public $heroList = [];
@@ -74,16 +76,21 @@ class DotabuffScraper
 	 */
 	private function getRequest($url)
 	{
-		$curl_handle = curl_init();
-		curl_setopt($curl_handle, CURLOPT_URL, $url);
-		curl_setopt($curl_handle, CURLOPT_CONNECTTIMEOUT, 2);
-		curl_setopt($curl_handle, CURLOPT_RETURNTRANSFER, 1);
-		curl_setopt($curl_handle, CURLOPT_USERAGENT, 'Dota2');
-		$content = curl_exec($curl_handle);
-		if(curl_errno($curl_handle)) {
-			$this->addError($url.' fetching error: '.curl_error($curl));
+		$content = false;
+		if(extension_loaded('curl')) {
+			$curl_handle = curl_init();
+			curl_setopt($curl_handle, CURLOPT_URL, $url);
+			curl_setopt($curl_handle, CURLOPT_CONNECTTIMEOUT, 2);
+			curl_setopt($curl_handle, CURLOPT_RETURNTRANSFER, 1);
+			curl_setopt($curl_handle, CURLOPT_USERAGENT, 'Dota2');
+			$content = curl_exec($curl_handle);
+			if(curl_errno($curl_handle)) {
+				$this->addError($url.' fetching error: '.curl_error($curl));
+			}
+			curl_close($curl_handle);
+		} else {
+			$this->addError('php-curl extension is required for this class');
 		}
-		curl_close($curl_handle);
 		return $content;
 	}
 
