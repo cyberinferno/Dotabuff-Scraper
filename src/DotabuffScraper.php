@@ -35,12 +35,12 @@ class DotabuffScraper
 		if (!is_null($heroGrid)) {
 			$childNodes = $heroGrid->childNodes;
 			foreach ($childNodes as $node) {
-				$heroId = substr($node->getAttribute('href'), 8);
-				$roles = explode(' ', $node->getAttribute('class'));
-				$this->heroList[$heroId] = $node->nodeValue;
-				$style = $node->childNodes->item(0)->getAttribute('style');
-				$this->heroBg[$heroId] = substr($style, 16, strlen($style) - 17);
-				$this->heroRole[$heroId] = $roles;
+				if($node instanceof \DOMElement && $node->nodeName == 'a') {
+					$heroId = substr($node->getAttribute('href'), 8);
+					$this->heroList[$heroId] = $node->nodeValue;
+					$style = $node->childNodes->item(0)->getAttribute('style');
+					$this->heroBg[$heroId] = substr($style, 16, strlen($style) - 17);
+				}
 			}
 			return true;
 		}
@@ -119,7 +119,7 @@ class DotabuffScraper
 	 */
 	private function getXpath($content)
 	{
-		$doc = new DOMDocument;
+		$doc = new \DOMDocument;
 		libxml_use_internal_errors(true);
 		if(!$doc->loadHTML($content)) {
 			$error = '';
@@ -130,7 +130,7 @@ class DotabuffScraper
 			$this->addError('Load HTML error: '.$error);
 			return false;
 		}
-		$xpath = new DOMXpath($doc);
+		$xpath = new \DOMXpath($doc);
 		return $xpath;
 	}
 }
