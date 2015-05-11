@@ -30,7 +30,7 @@ class DotabuffScraper
 		if(!$content) {
 			return false;
 		}
-		$xpath = $this->getExpath($content);
+		$xpath = $this->getXpath($content);
 		$heroGrid = $xpath->query("//div[@class='hero-grid']")->item(0);
 		if (!is_null($heroGrid)) {
 			$childNodes = $heroGrid->childNodes;
