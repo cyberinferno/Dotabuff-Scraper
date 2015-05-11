@@ -1,5 +1,5 @@
 <?php
-namespace cyberinferno;
+namespace cyberinferno\dotabuffscraper;
 
 class DotabuffScraper
 {
