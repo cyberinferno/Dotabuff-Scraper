@@ -1,97 +1,141 @@
 <?php
 namespace cyberinferno\dotabuffscraper;
 
+use Goutte\Client;
+use Symfony\Component\DomCrawler\Crawler;
+
+/**
+ * Class DotabuffScraper A simple tool to scrape Dotabuff website for information
+ * @package cyberinferno\dotabuffscraper
+ */
 class DotabuffScraper
 {
-	public $heroList = [];
-	public $heroBg = [];
-	public $heroRole = [];
+	const BASE_URL				= 'http://www.dotabuff.com';
+	const HEROES_URL			= 'http://www.dotabuff.com/heroes';
 
-	private $_heroesUrl = 'http://www.dotabuff.com/heroes';
+	private $_heroList = [];
 	private $_patch;
 	private $_errors = [];
+	private $_client;
 
 	/**
 	 * Constructor allowing to specify patch version
-	 * @param string $patch Patch string for which information has to be scraped
+	 * @param string|null $patch Patch string for which information has to be scraped
+	 * @throws \Exception
 	 */
-	function __construct($patch = 'patch_6.83c')
+	public function __construct($patch = null)
 	{
 		$this->_patch = $patch;
+		$this->_client = new Client();
 	}
 
 	/**
-	 * Scrapes hero ID, hero background image, hero roles and hero names of all available heroes
-	 * @return bool status of scraping
-	 */
-	public function scrapeHeroesData()
+	 * Checks connectivity to Dotabuff website
+	 * @return bool
+     */
+	private function canConnectToDotabuff()
 	{
-		$content = $this->getRequest($this->_heroesUrl);
-		if(!$content) {
+		try {
+			$crawler = $this->_client->request('GET', self::BASE_URL);
+			$title = $crawler->filterXPath('//title')->text();
+			return !(strpos($title, 'DOTABUFF') === false);
+		} catch (\Exception $e) {
 			return false;
 		}
-		$xpath = $this->getXpath($content);
-		$heroGrid = $xpath->query("//div[@class='hero-grid']")->item(0);
-		if (!is_null($heroGrid)) {
-			$childNodes = $heroGrid->childNodes;
-			foreach ($childNodes as $node) {
-				if($node instanceof \DOMElement && $node->nodeName == 'a') {
-					$heroId = substr($node->getAttribute('href'), 8);
-					$this->heroList[$heroId] = $node->nodeValue;
-					$style = $node->childNodes->item(0)->getAttribute('style');
-					$this->heroBg[$heroId] = substr($style, 16, strlen($style) - 17);
-				}
-			}
-			return true;
-		}
-		return false;
 	}
 
 	/**
-	 * Scrapes matchups for each hero with all available heroes
-	 * @todo Do HTML processing and saving of data
-	 * @return bool status of scraping
-	 */
-	public function scrapeWinRates()
+	 * Returns all hero data list
+	 * @return array Key value pair of heroes
+     */
+	public function getHeroList()
 	{
-		foreach ($this->heroList as $key => $value) {
-			$dataUrl = $this->_heroesUrl.'/'.$key.'/matchups?date='.$this->_patch;
-			$content = $this->getRequest($dataUrl);
-			if(!$content) {
-				return false;
-			}
-			$xpath = $this->getExpath($content);
-			$tableBody = $xpath->query("//table")->item(1);
-			if (!is_null($heroGrid)) {
-				
+		$this->clearPreviousErrors();
+		if (!$this->canConnectToDotabuff()) {
+			$this->addError('Could not connect to Dotabuff server.
+			Please make sure you are connected to the internet and your firewall is not blocking Dotabuff website!');
+			return [];
+		}
+		if (!is_array($this->_heroList) || count($this->_heroList) === 0) {
+			$crawler = $this->_client->request('get', self::HEROES_URL);
+			$heroData = [];
+			try {
+				$heroDivContents = $crawler->filter('div.hero-grid')->children();
+				$heroDivContents->filter('a')->each(function (Crawler $node, $i) {
+					$heroData[end(explode('/', $node->attr('href')))] = $node->text();
+				});
+				$this->_heroList = $heroData;
+				return $this->_heroList;
+			} catch (\Exception $e) {
+				$this->addError(get_class($e) . ': ' . $e->getMessage());
+				return [];
 			}
 		}
-		return false;
+		return $this->_heroList;
 	}
 
 	/**
-	 * Does a Curl get request to the given URL
-	 * @param  string $url URL for which the request has to be made
-	 * @return string/bool HTML content of the request if the request was successfull else FALSE
-	 */
-	private function getRequest($url)
+	 * Returns extra hero information
+	 * @param $heroKey String Hero key whose info has to be fetched
+	 * @return array
+     */
+	public function getHeroInfo($heroKey)
 	{
-		$content = false;
-		if(extension_loaded('curl')) {
-			$curl_handle = curl_init();
-			curl_setopt($curl_handle, CURLOPT_URL, $url);
-			curl_setopt($curl_handle, CURLOPT_CONNECTTIMEOUT, 2);
-			curl_setopt($curl_handle, CURLOPT_RETURNTRANSFER, 1);
-			curl_setopt($curl_handle, CURLOPT_USERAGENT, 'Dota2');
-			$content = curl_exec($curl_handle);
-			if(curl_errno($curl_handle)) {
-				$this->addError($url.' fetching error: '.curl_error($curl));
-			}
-			curl_close($curl_handle);
-		} else {
-			$this->addError('php-curl extension is required for this class');
+		$this->clearPreviousErrors();
+		if (!$this->canConnectToDotabuff()) {
+			$this->addError('Could not connect to Dotabuff server.
+			Please make sure you are connected to the internet and your firewall is not blocking Dotabuff website!');
+			return [];
 		}
-		return $content;
+		$crawler = $this->_client->request('get', self::HEROES_URL.'/'.$heroKey);
+		try {
+			if ($crawler->filter('span.won')->count() !== 0) {
+				$winRate = $crawler->filter('span.won')->first()->text();
+			} else {
+				$winRate =$crawler->filter('span.lost')->first()->text();
+			}
+			return [
+				'roles' => $crawler->filter('small')->first()->text(),
+				'popularity' => $crawler->filter('dd')->first()->text(),
+				'win_rate' => $winRate
+			];
+		} catch (\Exception $e) {
+			$this->addError(get_class($e) . ': ' . $e->getMessage());
+			return [];
+		}
+	}
+
+	public function getHeroMatchup($heroKey)
+	{
+		$this->clearPreviousErrors();
+		if (!$this->canConnectToDotabuff()) {
+			$this->addError('Could not connect to Dotabuff server.
+			Please make sure you are connected to the internet and your firewall is not blocking Dotabuff website!');
+			return [];
+		}
+		$crawler = $this->_client->request('get', self::HEROES_URL.'/'.$heroKey.'/matchups');
+		try {
+			$matchupData = [];
+			$tbody = $crawler->filter('tbody')->first()->children();
+			$tbody->filter('tr')->each(function (Crawler $node, $i) use($matchupData){
+				$data = ['hero' => end(explode('/', $node->attr('data-link-to')))];
+				$node->filter('td')->each(function (Crawler $n, $i) use($data){
+					switch ($i) {
+						case 2:
+							$data['advantage'] = $n->attr('data-value');
+							break;
+						case 3:
+							$data['win_rate'] = $n->attr('data-value');
+							break;
+					}
+				});
+				$matchupData[] = $data;
+			});
+			return $matchupData;
+		} catch (\Exception $e) {
+			$this->addError(get_class($e) . ': ' . $e->getMessage());
+			return [];
+		}
 	}
 
 	/**
@@ -113,24 +157,19 @@ class DotabuffScraper
 	}
 
 	/**
-	 * Returns XPath object for the HML content
-	 * @param  string $content HTML string
-	 * @return DOMXpath XPath object
-	 */
-	private function getXpath($content)
+	 * Returns whether error has occurred
+	 * @return bool
+     */
+	public function hasError()
 	{
-		$doc = new \DOMDocument;
-		libxml_use_internal_errors(true);
-		if(!$doc->loadHTML($content)) {
-			$error = '';
-			foreach (libxml_get_errors() as $error) {
-				$error .= $error->message.' | ';
-			}
-			libxml_clear_errors();
-			$this->addError('Load HTML error: '.$error);
-			return false;
-		}
-		$xpath = new \DOMXpath($doc);
-		return $xpath;
+		return count($this->_errors) !== 0;
+	}
+
+	/**
+	 * Clears previously set errors
+     */
+	private function clearPreviousErrors()
+	{
+		$this->_errors = [];
 	}
 }
